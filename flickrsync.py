@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import urllib.request
 import pyexiv2
+from pyexiv2.utils import make_fraction
 import flickrapi
 import webbrowser
 import datetime
@@ -131,6 +132,29 @@ def generateFilename(photoInfo):
     return taken + "_" + title + "." + extension
 
 
+def gpsDecimalToDMS(decimal, loc):
+    if decimal < 0:
+        latlonRef = loc[0]
+    elif decimal > 0:
+        latlonRef = loc[1]
+    else:
+        latlonRef = ""
+    abs_value = abs(decimal)
+    deg =  int(abs_value)
+    t = (abs_value-deg)*60
+    min = int(t)
+    sec = round((t - min)* 60, 6)
+    return (deg, min, sec, latlonRef)
+
+
+def gpsDecimalLatToDMS(decimalLat):
+    return gpsDecimalToDMS(decimalLat, ["S", "N"])
+
+
+def gpsDecimalLonToDMS(decimalLon):
+    return gpsDecimalToDMS(decimalLon, ["W", "E"])
+
+
 def downloadPhotoSet(setName, setID):
     if not os.path.exists(setName):
         os.makedirs(setName)
@@ -177,10 +201,24 @@ def downloadPhotoSet(setName, setID):
         if len(tags) > 0:
             photoExif['Xmp.dc.subject'] = tags
 
+        # set the date taken
         taken = photoInfo.find('dates').get('taken')
-        taken = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
-        photoExif['Xmp.dc.date'] = [taken]
-        photoExif['Xmp.xmp.CreateDate'] = taken
+        takenFormatted = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
+        photoExif['Xmp.dc.date'] = [takenFormatted]
+        photoExif['Xmp.xmp.CreateDate'] = takenFormatted
+
+        # add GPS coordinates
+        location = photoInfo.find('location')
+        lat = gpsDecimalLatToDMS(float(location.get('latitude')))
+        lon = gpsDecimalLonToDMS(float(location.get('longitude')))
+        latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
+        lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
+        photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
+        photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
+        photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
+        photoExif["Exif.GPSInfo.GPSLongitude"] = lonDMS
+        photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
+        photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
 
         setExif(filename,photoExif)
 
