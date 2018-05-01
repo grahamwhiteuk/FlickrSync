@@ -126,7 +126,10 @@ def generateFilename(photoInfo):
     title = photoInfo.find('title').text.replace(" ", "_")
 
     # get the file extension
-    extension = photoInfo.get('originalformat')
+    if photoInfo.get('media') == 'video':
+        extension = 'mp4'
+    else:
+        extension = photoInfo.get('originalformat')
 
     # build and return the filename string
     return taken + "_" + title + "." + extension
@@ -169,58 +172,66 @@ def downloadPhotoSet(setName, setID):
 
         # work out a filename for the photo once downloaded
         filename = setName + os.sep + generateFilename(photoInfo)
-        print(filename)
 
-        # download the file
-        sizes = flickr.photos.getSizes(photo_id=photoId).find('sizes')
-        url = sizes.find('.//size[@label="Original"]').get('source')
-        urllib.request.urlretrieve(url, filename)
+        # try downloading the file
+        try:
+            sizes = flickr.photos.getSizes(photo_id=photoId).find('sizes')
+            if filename.endswith('.mp4'):
+                url = sizes.find('.//size[@label="Video Original"]').get('source')
+            else:
+                url = sizes.find('.//size[@label="Original"]').get('source')
+            urllib.request.urlretrieve(url, filename)
+            print(filename)
+        except:
+            continue
 
-        # work out the exif and XMP vales
-        photoExif['Exif.Image.Copyright'] = getCopyright(photoInfo)
-        photoExif['Exif.Image.Artist'] = getOwner(photoInfo)
-        photoExif['Xmp.dc.rights'] = photoExif['Exif.Image.Copyright']
-        photoExif['Xmp.dc.creator'] = [getOwner(photoInfo)]
-        photoExif['Xmp.xmpRights.Owner'] = photoExif['Xmp.dc.creator']
-        photoExif['Xmp.xmpRights.Marked'] = True
-        photoExif['Xmp.xmpRights.UsageTerms'] = getLicense(photoInfo)
-        photoExif['Xmp.dc.title'] = photoInfo.find('title').text
-        photoExif['Exif.Image.ImageDescription'] = photoExif['Xmp.dc.title']
+        if not filename.endswith('.mp4'):
+            # work out the exif and XMP vales
+            photoExif['Exif.Image.Copyright'] = getCopyright(photoInfo)
+            photoExif['Exif.Image.Artist'] = getOwner(photoInfo)
+            photoExif['Xmp.dc.rights'] = photoExif['Exif.Image.Copyright']
+            photoExif['Xmp.dc.creator'] = [getOwner(photoInfo)]
+            photoExif['Xmp.xmpRights.Owner'] = photoExif['Xmp.dc.creator']
+            photoExif['Xmp.xmpRights.Marked'] = True
+            photoExif['Xmp.xmpRights.UsageTerms'] = getLicense(photoInfo)
+            photoExif['Xmp.dc.title'] = photoInfo.find('title').text
+            photoExif['Exif.Image.ImageDescription'] = photoExif['Xmp.dc.title']
 
-        # only set the description if there's one to set (or default to setting the same as the title)
-        description = photoInfo.find('description').text
-        if description is None:
-            description = photoExif['Xmp.dc.title']
-        photoExif['Xmp.dc.description'] = description
-        photoExif['Exif.Photo.UserComment'] = description
+            # only set the description if there's one to set (or default to setting the same as the title)
+            description = photoInfo.find('description').text
+            if description is None:
+                description = photoExif['Xmp.dc.title']
+            photoExif['Xmp.dc.description'] = description
+            photoExif['Exif.Photo.UserComment'] = description
 
-        # set the subject using the image tags (if there are any)
-        tags = []
-        for tag in photoInfo.find('tags').getiterator('tag'):
-            tags.append(tag.text)
-        if len(tags) > 0:
-            photoExif['Xmp.dc.subject'] = tags
+            # set the subject using the image tags (if there are any)
+            tags = []
+            for tag in photoInfo.find('tags').getiterator('tag'):
+                tags.append(tag.text)
+            if len(tags) > 0:
+                photoExif['Xmp.dc.subject'] = tags
 
-        # set the date taken
-        taken = photoInfo.find('dates').get('taken')
-        takenFormatted = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
-        photoExif['Xmp.dc.date'] = [takenFormatted]
-        photoExif['Xmp.xmp.CreateDate'] = takenFormatted
+            # set the date taken
+            taken = photoInfo.find('dates').get('taken')
+            takenFormatted = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
+            photoExif['Xmp.dc.date'] = [takenFormatted]
+            photoExif['Xmp.xmp.CreateDate'] = takenFormatted
 
-        # add GPS coordinates
-        location = photoInfo.find('location')
-        lat = gpsDecimalLatToDMS(float(location.get('latitude')))
-        lon = gpsDecimalLonToDMS(float(location.get('longitude')))
-        latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
-        lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
-        photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
-        photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
-        photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
-        photoExif["Exif.GPSInfo.GPSLongitude"] = lonDMS
-        photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
-        photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
+            # add GPS coordinates if available
+            location = photoInfo.find('location')
+            if location is not None:
+                lat = gpsDecimalLatToDMS(float(location.get('latitude')))
+                lon = gpsDecimalLonToDMS(float(location.get('longitude')))
+                latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
+                lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
+                photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
+                photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
+                photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
+                photoExif["Exif.GPSInfo.GPSLongitude"] = lonDMS
+                photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
+                photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
 
-        setExif(filename,photoExif)
+            setExif(filename,photoExif)
 
 
 def rangeSplit(rangeStr):
