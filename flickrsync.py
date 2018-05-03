@@ -199,7 +199,7 @@ def downloadPhotoSet(setName, setID):
             photoExif['Xmp.xmpRights.Owner'] = photoExif['Xmp.dc.creator']
             photoExif['Xmp.xmpRights.Marked'] = True
             photoExif['Xmp.xmpRights.UsageTerms'] = getLicense(photoInfo)
-            photoExif['Xmp.dc.title'] = photoInfo.find('title').text
+            photoExif['Xmp.dc.title'] = photoInfo.find('title').text or 'Unknown'
             photoExif['Exif.Image.ImageDescription'] = photoExif['Xmp.dc.title']
 
             # only set the description if there's one to set (or default to setting the same as the title)
