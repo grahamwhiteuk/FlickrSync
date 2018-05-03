@@ -122,8 +122,11 @@ def generateFilename(photoInfo):
     # compress the string a bit and remove the space
     taken = taken.replace("-","").replace(":","").replace(" ","-")
 
-    # get the title and replace spaces with underscore
-    title = photoInfo.find('title').text.replace(" ", "_")
+    try:
+        # get the title and replace spaces with underscore
+        title = photoInfo.find('title').text.replace(" ", "_")
+    except:
+        title = 'Unknown'
 
     # get the file extension
     if photoInfo.get('media') == 'video':
