@@ -164,6 +164,7 @@ def gpsDecimalLonToDMS(decimalLon):
 
 
 def downloadPhotoSet(setName, setID):
+    setName = setName.replace("/","-")
     if not os.path.exists(setName):
         os.makedirs(setName)
 
