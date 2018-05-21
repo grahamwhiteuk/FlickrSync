@@ -41,6 +41,16 @@ import datetime
 
 
 def setExif(filename, exif):
+    """Writes exif data to a file.
+
+    Exif updates are additive i.e existing exif data in an image is not
+    overwritten by the exif data specified, only blanks are filled in
+
+    Keyword arguments:
+    filename -- the file path and name string of the file to write to
+    exif -- a dictionary of Exif-Tag-Name=Value entries
+    """
+
     # read the original exif from the file
     metadata = pyexiv2.ImageMetadata(filename)
     metadata.read()
@@ -59,6 +69,8 @@ def setExif(filename, exif):
 
 
 def flickrAuth():
+    """Authenticates to the Flickr API."""
+
     # Only do this if we don't have a valid token already
     if not flickr.token_valid(perms='read'):
 
@@ -79,6 +91,8 @@ def flickrAuth():
 
 
 def flickrGetPhotoSets():
+    """Returns an array of photosets."""
+
     photosets = []
     for photoset in flickr.photosets.getList().getiterator('photoset'):
         title = photoset.find('title').text
@@ -88,6 +102,12 @@ def flickrGetPhotoSets():
 
 
 def getLicense(photoInfo):
+    """Returns a license string for a photo.
+
+    Keyword arguments:
+    photoInfo -- the photo info as return by the Flickr getInfo API call
+    """
+
     licenses = [
         "All Rights Reserved"
         "CC BY-NC-SA (Attribution-NonCommercial-ShareAlike) License",
@@ -105,10 +125,22 @@ def getLicense(photoInfo):
 
 
 def getOwner(photoInfo):
+    """Returns the owner name string for a photo.
+
+    Keyword arguments:
+    photoInfo -- the photo info as return by the Flickr getInfo API call
+    """
+
     return photoInfo.find('owner').get('realname')
 
 
 def getCopyright(photoInfo):
+    """Returns a copyright string for a photo.
+
+    Keyword arguments:
+    photoInfo -- the photo info as return by the Flickr getInfo API call
+    """
+
     taken = photoInfo.find('dates').get('taken')
     year = taken[:4]
     owner = getOwner(photoInfo)
@@ -119,6 +151,20 @@ def getCopyright(photoInfo):
 
 
 def generateFilename(photoInfo):
+    """Creates a file system file name for a photo.
+
+    The file name will be in the format date-taken_title.extension.  For
+    example, 20180521203625_My_Flickr_Picture.jpg.  The date taken will be a
+    numeric string which means the pictures on the file system will sort in date
+    order when listed; folloed by underscore; followed by the title of the image
+    with spaces replaced with underscores; followed by the image extension.  All
+    video files receive the mp4 extension, images will have their original type
+    and extension preserved.
+
+    Keyword arguments:
+    photoInfo -- the photo info as return by the Flickr getInfo API call
+    """
+
     # get the date the photo was taken
     taken = photoInfo.find('dates').get('taken')
     # compress the string a bit and remove the space
@@ -141,6 +187,13 @@ def generateFilename(photoInfo):
 
 
 def gpsDecimalToDMS(decimal, loc):
+    """Returns a GPS coordinate in DMS format.
+
+    Keyword arguments:
+    decimal -- a real number containing the lat or lon
+    loc -- an array of strings representing lat or lon
+        -- must be one of ["S", "N"] or ["W", "E"]
+    """
     if decimal < 0:
         latlonRef = loc[0]
     elif decimal > 0:
@@ -156,14 +209,37 @@ def gpsDecimalToDMS(decimal, loc):
 
 
 def gpsDecimalLatToDMS(decimalLat):
+    """Returns a GPS coordinate in DMS format.
+
+    Wrapper function to convert latitude from decimal to DMS format.
+
+    Keyword arguments:
+    decimalLat -- a real number containing the latitude
+    """
+
     return gpsDecimalToDMS(decimalLat, ["S", "N"])
 
 
 def gpsDecimalLonToDMS(decimalLon):
+    """Returns a GPS coordinate in DMS format.
+
+    Wrapper function to convert longitude from decimal to DMS format.
+
+    Keyword arguments:
+    decimalLon -- a real number containing the longitude
+    """
+
     return gpsDecimalToDMS(decimalLon, ["W", "E"])
 
 
 def downloadPhotoSet(setName, setID):
+    """Downloads images from a photoset and sets their exif data.
+
+    Keyword arguments:
+    setName -- a string containing the name of the set to download
+    setID -- a string containing the ID number of the set to download
+    """
+
     setName = setName.replace("/","-")
     if not os.path.exists(setName):
         os.makedirs(setName)
@@ -241,6 +317,15 @@ def downloadPhotoSet(setName, setID):
 
 
 def rangeSplit(rangeStr):
+    """Return an array of numbers from a specified set of ranges.
+
+    Given a string such as "1 2 4-6 8" will return [1,2,4,5,6,8].  The numbers
+    and ranges can either be space separated or comma separated (but not both).
+
+    Keyword arguments:
+    range string -- a string containing ranges such as "1 2 4-6 8"
+    """
+
     result = []
     splitChar = ' '
     if ',' in rangeStr:
