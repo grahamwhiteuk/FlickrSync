@@ -367,7 +367,7 @@ if __name__ == "__main__":
         print(columnWidth.format(setNumber) + ") " + photosets[setNumber]['title'])
 
     # ask which sets to download (supports comma or space separation and ranges)
-    setsToDownload = input('Which sets do you want to download: ')
+    setsToDownload = input('Which albums do you want to download: ')
     setsToDownload = rangeSplit(setsToDownload)
 
     # download the specified sets
