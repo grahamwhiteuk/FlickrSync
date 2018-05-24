@@ -90,10 +90,17 @@ def flickrAuth():
         flickr.get_access_token(verifier)
 
 
-def flickrGetPhotoSets():
-    """Returns an array of photosets."""
+def flickrGetPhotoSets(incNotInSet=False):
+    """Returns an array of photosets.
 
-    photosets = []
+    Keyword arguments:
+    incNotInSet -- whether to include an entry for photos not in a set (default=False)
+    """
+    if incNotInSet:
+        photosets = [{'title':'Photos not in an album','id':None}]
+    else:
+        photosets = []
+
     for photoset in flickr.photosets.getList().getiterator('photoset'):
         title = photoset.find('title').text
         id = photoset.get('id')
@@ -232,6 +239,89 @@ def gpsDecimalLonToDMS(decimalLon):
     return gpsDecimalToDMS(decimalLon, ["W", "E"])
 
 
+def downloadPhoto(path,photoId):
+    """Downloads an image and sets exif data.
+
+    Keyword arguments:
+    path -- a string containing the name of the directory to write to
+    photoId -- a string containing the ID number of the image to download
+    """
+
+    # create the directory to store the images
+    setPath = path.replace("/","-")
+    if not os.path.exists(setPath):
+        os.makedirs(setPath)
+
+    # download the photo metadata
+    photoInfo = flickr.photos.getInfo(photo_id=photoId).find('photo')
+
+    # work out a filename for the photo once downloaded
+    filename = path + os.sep + generateFilename(photoInfo)
+
+    # try downloading the file
+    try:
+        sizes = flickr.photos.getSizes(photo_id=photoId).find('sizes')
+        if filename.endswith('.mp4'):
+            url = sizes.find('.//size[@label="Video Original"]').get('source')
+        else:
+            url = sizes.find('.//size[@label="Original"]').get('source')
+        urllib.request.urlretrieve(url, filename)
+        print(filename)
+    except:
+        return
+
+    # a place to build up the exif info to write
+    photoExif = {}
+
+    if not filename.endswith('.mp4'):
+        # work out the exif and XMP vales
+        photoExif['Exif.Image.Copyright'] = getCopyright(photoInfo)
+        photoExif['Exif.Image.Artist'] = getOwner(photoInfo)
+        photoExif['Xmp.dc.rights'] = photoExif['Exif.Image.Copyright']
+        photoExif['Xmp.dc.creator'] = [getOwner(photoInfo)]
+        photoExif['Xmp.xmpRights.Owner'] = photoExif['Xmp.dc.creator']
+        photoExif['Xmp.xmpRights.Marked'] = True
+        photoExif['Xmp.xmpRights.UsageTerms'] = getLicense(photoInfo)
+        photoExif['Xmp.dc.title'] = photoInfo.find('title').text or 'Unknown'
+        photoExif['Exif.Image.ImageDescription'] = photoExif['Xmp.dc.title']
+
+        # only set the description if there's one to set (or default to setting the same as the title)
+        description = photoInfo.find('description').text
+        if description is None:
+            description = photoExif['Xmp.dc.title']
+        photoExif['Xmp.dc.description'] = description
+        photoExif['Exif.Photo.UserComment'] = description
+
+        # set the subject using the image tags (if there are any)
+        tags = []
+        for tag in photoInfo.find('tags').getiterator('tag'):
+            tags.append(tag.text)
+        if len(tags) > 0:
+            photoExif['Xmp.dc.subject'] = tags
+
+        # set the date taken
+        taken = photoInfo.find('dates').get('taken')
+        takenFormatted = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
+        photoExif['Xmp.dc.date'] = [takenFormatted]
+        photoExif['Xmp.xmp.CreateDate'] = takenFormatted
+
+        # add GPS coordinates if available
+        location = photoInfo.find('location')
+        if location is not None:
+            lat = gpsDecimalLatToDMS(float(location.get('latitude')))
+            lon = gpsDecimalLonToDMS(float(location.get('longitude')))
+            latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
+            lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
+            photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
+            photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
+            photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
+            photoExif["Exif.GPSInfo.GPSLongitude"] = lonDMS
+            photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
+            photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
+
+        setExif(filename,photoExif)
+
+
 def downloadPhotoSet(setName, setID):
     """Downloads images from a photoset and sets their exif data.
 
@@ -240,80 +330,32 @@ def downloadPhotoSet(setName, setID):
     setID -- a string containing the ID number of the set to download
     """
 
-    setName = setName.replace("/","-")
-    if not os.path.exists(setName):
-        os.makedirs(setName)
-
     for photo in flickr.walk_set(setID):
-        # a place to build up the exif info to write
-        photoExif = {}
-
-        # need the ID of the photo in order to get the photo info
         photoId = photo.get('id')
-        photoInfo = flickr.photos.getInfo(photo_id=photoId).find('photo')
+        downloadPhoto(setName,photoId)
 
-        # work out a filename for the photo once downloaded
-        filename = setName + os.sep + generateFilename(photoInfo)
 
-        # try downloading the file
-        try:
-            sizes = flickr.photos.getSizes(photo_id=photoId).find('sizes')
-            if filename.endswith('.mp4'):
-                url = sizes.find('.//size[@label="Video Original"]').get('source')
-            else:
-                url = sizes.find('.//size[@label="Original"]').get('source')
-            urllib.request.urlretrieve(url, filename)
-            print(filename)
-        except:
-            continue
+def downloadNotInSet(setPath):
+    """Downloads all images that are not part of a set.
 
-        if not filename.endswith('.mp4'):
-            # work out the exif and XMP vales
-            photoExif['Exif.Image.Copyright'] = getCopyright(photoInfo)
-            photoExif['Exif.Image.Artist'] = getOwner(photoInfo)
-            photoExif['Xmp.dc.rights'] = photoExif['Exif.Image.Copyright']
-            photoExif['Xmp.dc.creator'] = [getOwner(photoInfo)]
-            photoExif['Xmp.xmpRights.Owner'] = photoExif['Xmp.dc.creator']
-            photoExif['Xmp.xmpRights.Marked'] = True
-            photoExif['Xmp.xmpRights.UsageTerms'] = getLicense(photoInfo)
-            photoExif['Xmp.dc.title'] = photoInfo.find('title').text or 'Unknown'
-            photoExif['Exif.Image.ImageDescription'] = photoExif['Xmp.dc.title']
+    Keyword arguments:
+    setPath -- the name of the directory in which the images will be saved
+    """
 
-            # only set the description if there's one to set (or default to setting the same as the title)
-            description = photoInfo.find('description').text
-            if description is None:
-                description = photoExif['Xmp.dc.title']
-            photoExif['Xmp.dc.description'] = description
-            photoExif['Exif.Photo.UserComment'] = description
+    getNextPage = True
+    page = 1
 
-            # set the subject using the image tags (if there are any)
-            tags = []
-            for tag in photoInfo.find('tags').getiterator('tag'):
-                tags.append(tag.text)
-            if len(tags) > 0:
-                photoExif['Xmp.dc.subject'] = tags
+    while getNextPage:
+        photos = flickr.photos.getNotInSet(page=page,per_page=500).findall('.//photo')
 
-            # set the date taken
-            taken = photoInfo.find('dates').get('taken')
-            takenFormatted = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S')
-            photoExif['Xmp.dc.date'] = [takenFormatted]
-            photoExif['Xmp.xmp.CreateDate'] = takenFormatted
+        for photo in photos:
+            photoId = photo.get('id')
+            downloadPhoto(setPath,photoId)
 
-            # add GPS coordinates if available
-            location = photoInfo.find('location')
-            if location is not None:
-                lat = gpsDecimalLatToDMS(float(location.get('latitude')))
-                lon = gpsDecimalLonToDMS(float(location.get('longitude')))
-                latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
-                lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
-                photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
-                photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
-                photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
-                photoExif["Exif.GPSInfo.GPSLongitude"] = lonDMS
-                photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
-                photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
-
-            setExif(filename,photoExif)
+        if len(photos) is 100:
+            page = page + 1
+        else:
+            getNextPage = False
 
 
 def rangeSplit(rangeStr):
@@ -323,7 +365,7 @@ def rangeSplit(rangeStr):
     and ranges can either be space separated or comma separated (but not both).
 
     Keyword arguments:
-    range string -- a string containing ranges such as "1 2 4-6 8"
+    rangeStr -- a string containing ranges such as "1 2 4-6 8"
     """
 
     result = []
@@ -358,8 +400,8 @@ if __name__ == "__main__":
     flickr = flickrapi.FlickrAPI(api_key, api_secret)
     flickrAuth()
 
-    # download a list of photosets
-    photosets = flickrGetPhotoSets()
+    # download a list of photosets and add an entry for photos not in a set
+    photosets = flickrGetPhotoSets(incNotInSet=True)
 
     # print out a list of sets from the authorised user
     for setNumber in range(0,len(photosets)):
@@ -372,4 +414,7 @@ if __name__ == "__main__":
 
     # download the specified sets
     for setToDownload in setsToDownload:
-        downloadPhotoSet(photosets[setToDownload]['title'],photosets[setToDownload]['id'])
+        if photosets[setToDownload]['id'] is not None:
+            downloadPhotoSet(photosets[setToDownload]['title'],photosets[setToDownload]['id'])
+        else:
+            downloadNotInSet(photosets[setToDownload]['title'])
