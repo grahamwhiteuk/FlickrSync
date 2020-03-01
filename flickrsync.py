@@ -22,14 +22,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-## Some useful info/links...
-## http://www.exiv2.org/tags.html
-## https://www.flickr.com/services/api/
-## https://stuvel.eu/flickrapi-doc/
-## http://effbot.org/zone/element.htm
-## http://effbot.org/zone/element-xpath.htm
+# Some useful info/links...
+# http://www.exiv2.org/tags.html
+# https://www.flickr.com/services/api/
+# https://stuvel.eu/flickrapi-doc/
+# http://effbot.org/zone/element.htm
+# http://effbot.org/zone/element-xpath.htm
 
-import os, sys
+import os
+import sys
 from dotenv import load_dotenv
 from pathlib import Path
 import urllib.request
@@ -97,14 +98,14 @@ def flickrGetPhotoSets(incNotInSet=False):
     incNotInSet -- whether to include an entry for photos not in a set (default=False)
     """
     if incNotInSet:
-        photosets = [{'title':'Photos not in an album','id':None}]
+        photosets = [{'title': 'Photos not in an album', 'id': None}]
     else:
         photosets = []
 
     for photoset in flickr.photosets.getList().getiterator('photoset'):
         title = photoset.find('title').text
         id = photoset.get('id')
-        photosets.append({'title':title, 'id':id})
+        photosets.append({'title': title, 'id': id})
     return photosets
 
 
@@ -175,7 +176,7 @@ def generateFilename(photoInfo):
     # get the date the photo was taken
     taken = photoInfo.find('dates').get('taken')
     # compress the string a bit and remove the space
-    taken = taken.replace("-","").replace(":","").replace(" ","-")
+    taken = taken.replace("-", "").replace(":", "").replace(" ", "-")
 
     try:
         # get the title and replace spaces with underscore
@@ -208,10 +209,10 @@ def gpsDecimalToDMS(decimal, loc):
     else:
         latlonRef = ""
     abs_value = abs(decimal)
-    deg =  int(abs_value)
+    deg = int(abs_value)
     t = (abs_value-deg)*60
     min = int(t)
-    sec = round((t - min)* 60, 6)
+    sec = round((t - min) * 60, 6)
     return (deg, min, sec, latlonRef)
 
 
@@ -239,7 +240,7 @@ def gpsDecimalLonToDMS(decimalLon):
     return gpsDecimalToDMS(decimalLon, ["W", "E"])
 
 
-def downloadPhoto(path,photoId):
+def downloadPhoto(path, photoId):
     """Downloads an image and sets exif data.
 
     Keyword arguments:
@@ -248,7 +249,7 @@ def downloadPhoto(path,photoId):
     """
 
     # create the directory to store the images
-    setPath = path.replace("/","-")
+    setPath = path.replace("/", "-")
     if not os.path.exists(setPath):
         os.makedirs(setPath)
 
@@ -310,8 +311,8 @@ def downloadPhoto(path,photoId):
         if location is not None:
             lat = gpsDecimalLatToDMS(float(location.get('latitude')))
             lon = gpsDecimalLonToDMS(float(location.get('longitude')))
-            latDMS = (make_fraction(lat[0],1), make_fraction(int(lat[1]),1), make_fraction(int(lat[2]*1000000),1000000))
-            lonDMS = (make_fraction(lon[0],1), make_fraction(int(lon[1]),1), make_fraction(int(lon[2]*1000000),1000000))
+            latDMS = (make_fraction(lat[0], 1), make_fraction(int(lat[1]), 1), make_fraction(int(lat[2]*1000000), 1000000))
+            lonDMS = (make_fraction(lon[0], 1), make_fraction(int(lon[1]), 1), make_fraction(int(lon[2]*1000000), 1000000))
             photoExif["Exif.GPSInfo.GPSVersionID"] = '2 0 0 0'
             photoExif["Exif.GPSInfo.GPSLatitude"] = latDMS
             photoExif["Exif.GPSInfo.GPSLatitudeRef"] = lat[3]
@@ -319,7 +320,7 @@ def downloadPhoto(path,photoId):
             photoExif["Exif.GPSInfo.GPSLongitudeRef"] = lon[3]
             photoExif["Exif.GPSInfo.GPSDateStamp"] = datetime.datetime.strptime(taken, '%Y-%m-%d %H:%M:%S').strftime('%Y:%m:%d')
 
-        setExif(filename,photoExif)
+        setExif(filename, photoExif)
 
 
 def downloadPhotoSet(setName, setID):
@@ -332,7 +333,7 @@ def downloadPhotoSet(setName, setID):
 
     for photo in flickr.walk_set(setID):
         photoId = photo.get('id')
-        downloadPhoto(setName,photoId)
+        downloadPhoto(setName, photoId)
 
 
 def downloadNotInSet(setPath):
@@ -346,13 +347,13 @@ def downloadNotInSet(setPath):
     page = 1
 
     while getNextPage:
-        photos = flickr.photos.getNotInSet(page=page,per_page=500).findall('.//photo')
+        photos = flickr.photos.getNotInSet(page=page, per_page=500).findall('.//photo')
 
         for photo in photos:
             photoId = photo.get('id')
-            downloadPhoto(setPath,photoId)
+            downloadPhoto(setPath, photoId)
 
-        if len(photos) is 100:
+        if len(photos) == 100:
             page = page + 1
         else:
             getNextPage = False
@@ -387,7 +388,7 @@ def rangeSplit(rangeStr):
 if __name__ == "__main__":
     # load required env vars
     env_path = Path('.') / '.env'
-    load_dotenv(dotenv_path=env_path,verbose=True)
+    load_dotenv(dotenv_path=env_path, verbose=True)
     api_key = os.getenv("FLICKRSYNC_APIKEY")
     api_secret = os.getenv("FLICKRSYNC_APISECRET")
 
@@ -404,7 +405,7 @@ if __name__ == "__main__":
     photosets = flickrGetPhotoSets(incNotInSet=True)
 
     # print out a list of sets from the authorised user
-    for setNumber in range(0,len(photosets)):
+    for setNumber in range(0, len(photosets)):
         columnWidth = '{:' + str(len(str(len(photosets)))) + '}'
         print(columnWidth.format(setNumber) + ") " + photosets[setNumber]['title'])
 
@@ -415,6 +416,6 @@ if __name__ == "__main__":
     # download the specified sets
     for setToDownload in setsToDownload:
         if photosets[setToDownload]['id'] is not None:
-            downloadPhotoSet(photosets[setToDownload]['title'],photosets[setToDownload]['id'])
+            downloadPhotoSet(photosets[setToDownload]['title'], photosets[setToDownload]['id'])
         else:
             downloadNotInSet(photosets[setToDownload]['title'])
