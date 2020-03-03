@@ -98,14 +98,15 @@ def flickrGetPhotoSets(incNotInSet=False):
     incNotInSet -- whether to include an entry for photos not in a set (default=False)
     """
     if incNotInSet:
-        photosets = [{'title': 'Photos not in an album', 'id': None}]
+        photosets = [{'title': 'Photos not in an album', 'id': None, 'total': None}]
     else:
         photosets = []
 
     for photoset in flickr.photosets.getList().getiterator('photoset'):
         title = photoset.find('title').text
         id = photoset.get('id')
-        photosets.append({'title': title, 'id': id})
+        total = int(photoset.get('photos')) + int(photoset.get('videos'))
+        photosets.append({'title': title, 'id': id, 'total': total})
     return photosets
 
 
@@ -158,7 +159,7 @@ def getCopyright(photoInfo):
     return copyright
 
 
-def generateFilename(photoInfo):
+def generateFilename(photoInfo, photoNum):
     """Creates a file system file name for a photo.
 
     The file name will be in the format date-taken_title.extension.  For
@@ -191,7 +192,10 @@ def generateFilename(photoInfo):
         extension = photoInfo.get('originalformat')
 
     # build and return the filename string
-    return taken + "_" + title + "." + extension
+    if photoNum is None:
+        return taken + "_" + title + "." + extension
+    else:
+        return photoNum + "_" + taken + "_" + title + "." + extension
 
 
 def gpsDecimalToDMS(decimal, loc):
@@ -240,7 +244,7 @@ def gpsDecimalLonToDMS(decimalLon):
     return gpsDecimalToDMS(decimalLon, ["W", "E"])
 
 
-def downloadPhoto(path, photoId):
+def downloadPhoto(path, photoId, photoNum=None):
     """Downloads an image and sets exif data.
 
     Keyword arguments:
@@ -257,7 +261,7 @@ def downloadPhoto(path, photoId):
     photoInfo = flickr.photos.getInfo(photo_id=photoId).find('photo')
 
     # work out a filename for the photo once downloaded
-    filename = path + os.sep + generateFilename(photoInfo)
+    filename = path + os.sep + generateFilename(photoInfo, photoNum)
 
     # try downloading the file
     try:
@@ -323,17 +327,30 @@ def downloadPhoto(path, photoId):
         setExif(filename, photoExif)
 
 
-def downloadPhotoSet(setName, setID):
+def downloadPhotoSet(setName, setID, total):
     """Downloads images from a photoset and sets their exif data.
 
     Keyword arguments:
     setName -- a string containing the name of the set to download
     setID -- a string containing the ID number of the set to download
+    total -- an integer containing the total number of items in the set
     """
 
-    for photo in flickr.walk_set(setID):
+    for i, photo in enumerate(flickr.walk_set(setID)):
+
+        # format the number of the photo in the set
+        j = i + 1
+        if total < 10:
+            photoNum = str(j)
+        elif total < 100:
+            photoNum = f'{j:02}'
+        elif total < 1000:
+            photoNum = f'{j:03}'
+        else:
+            photoNum = f'{j:04}'
+
         photoId = photo.get('id')
-        downloadPhoto(setName, photoId)
+        downloadPhoto(setName, photoId, photoNum)
 
 
 def downloadNotInSet(setPath):
@@ -416,6 +433,8 @@ if __name__ == "__main__":
     # download the specified sets
     for setToDownload in setsToDownload:
         if photosets[setToDownload]['id'] is not None:
-            downloadPhotoSet(photosets[setToDownload]['title'], photosets[setToDownload]['id'])
+            downloadPhotoSet(photosets[setToDownload]['title'],
+                             photosets[setToDownload]['id'],
+                             photosets[setToDownload]['total'])
         else:
             downloadNotInSet(photosets[setToDownload]['title'])
